@@ -52,7 +52,7 @@ class CorrelationModule(nn.Module):
     def forward(self, x1, x2):
         pad = self.d // 2
         padded_x1 = F.pad(x1, (pad, pad, pad, pad))
-        padded_x1 = padded_x1.detach()
+
         patches = padded_x1.unfold(2, self.d + self.s1, self.s1).unfold(3, self.d + self.s1, self.s1)
         b, d, w, h = x1.shape
         out = torch.zeros((b, (self.d + self.s1) ** 2, w, h))
