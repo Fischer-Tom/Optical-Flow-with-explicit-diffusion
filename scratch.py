@@ -4,6 +4,8 @@ from datasets.flying_chairs import FlyingChairsDataset
 from torchvision import transforms
 from image_lib.core import display_flow_tensor
 from models.FlowNetS import FlowNetS
+from models.FlowNetC import FlowNetC
+import time
 
 use_cuda = torch.cuda.is_available()
 device = torch.device('cuda:0' if use_cuda else 'cpu')
@@ -16,7 +18,7 @@ b = (0.9, 0.999)
 params = {'batch_size': 2,
           'shuffle': True,
           'num_workers': 4}
-epochs = 1000
+epochs = 1
 running_loss = 0.0
 transforms = transforms.Compose([transforms.ToTensor()])
 
@@ -25,7 +27,7 @@ train_set = FlyingChairsDataset('datasets/FlyingChairs_release/data', transforms
 train_loader = torch.utils.data.DataLoader(train_set, **params)
 
 # Model
-flowNet = FlowNetS().to(device)
+flowNet = FlowNetC().to(device)
 
 # Optimizers
 optim = torch.optim.Adam(flowNet.parameters(), lr=lr, betas=b)
@@ -40,11 +42,14 @@ for epoch in range(epochs):
         im2 = im2.to(device)
         flow = flow.to(device)
     optim.zero_grad()
+    start = time.time()
     pred_flow = flowNet(im1, im2)
+    end = time.time()
+    print(end-start)
     loss = torch.norm(flow-pred_flow, p=2, dim=1).mean()
+
     loss.backward()
     optim.step()
-
     running_loss += loss.item()
     if epoch % 500 == 499:
         print(f'[{epoch+1}, {epoch+1}]: EPE-loss: {running_loss / 500:.3f}')

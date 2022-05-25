@@ -19,6 +19,16 @@ def image_to_tensor(path: str, mode='RGB'):
         im_np = np.asarray(im)
     return torch.from_numpy(im_np).permute(2, 0, 1)
 
+def image_to_numpy(path: str, mode='RGB'):
+    if mode == 'GS':
+        im = Image.open(path).convert('L')
+        im_np = np.expand_dims(np.asarray(im), axis=2)
+        print(im_np.shape)
+    else:
+        im = Image.open(path)
+        im_np = np.asarray(im)
+    return im_np
+
 
 def tensor_to_image(tensor):
     pass
@@ -38,6 +48,11 @@ def display_flow_tensor(tensor):
         plt.axis('off')
         plt.show()
 
+def display_flow_numpy(np_array):
+    flow_color = flow_vis.flow_to_color(np_array, convert_to_bgr=False)
+    plt.imshow(flow_color)
+    plt.axis('off')
+    plt.show()
 
 def display_batch_flow_tensor(tensor):
     raise Exception("not implemented!")
@@ -149,11 +164,10 @@ class InpaintingBlock(nn.Module):
         weight[1][0][2][1] = hy
         weight[1][0][1][1] = (1 - 2 * hx - 2 * hy)
         self.conv.weight = nn.Parameter(weight)
-
-
+"""
 tens1 = torch.Tensor(read('../datasets/FlyingChairs_release/data/00001_flow.flo')).permute(2, 0, 1)
 tens2 = torch.Tensor(read('../datasets/FlyingChairs_release/data/00002_flow.flo')).permute(2, 0, 1)
-tens = torch.stack((tens1, tens2), dim=0)
+tens = torch.stack((te"ns1, tens2), dim=0)
 display_flow_tensor(tens[0])
 block = DiffusionBlock()
 diff_tens = block(tens)
@@ -165,13 +179,4 @@ inp_tens = block(tens * masc, 50)
 masked_tens = inp_tens * masc
 display_flow_tensor(masked_tens[0].detach())
 display_flow_tensor(inp_tens[0].detach())
-"""
-tens = image_to_tensor('face.jpg', mode='GS').float()
-
-mask = torch.FloatTensor(tens.shape).uniform_() > 0.9
-# tens = hom_diff_inpaint_gs(tens*mask, mask, 20)
-block = InpaintingBlock()
-diffused_tens = block(tens*mask, 100)
-diffused_tens = diffused_tens.detach()
-display_tensor(diffused_tens)
 """
