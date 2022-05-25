@@ -13,7 +13,6 @@ def image_to_tensor(path: str, mode='RGB'):
     if mode == 'GS':
         im = Image.open(path).convert('L')
         im_np = np.expand_dims(np.asarray(im), axis=2)
-        print(im_np.shape)
     else:
         im = Image.open(path)
         im_np = np.asarray(im)
@@ -23,7 +22,6 @@ def image_to_numpy(path: str, mode='RGB'):
     if mode == 'GS':
         im = Image.open(path).convert('L')
         im_np = np.expand_dims(np.asarray(im), axis=2)
-        print(im_np.shape)
     else:
         im = Image.open(path)
         im_np = np.asarray(im)

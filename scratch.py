@@ -18,7 +18,7 @@ b = (0.9, 0.999)
 params = {'batch_size': 2,
           'shuffle': True,
           'num_workers': 4}
-epochs = 1
+epochs = 2
 running_loss = 0.0
 transforms = transforms.Compose([transforms.ToTensor()])
 
@@ -46,9 +46,14 @@ for epoch in range(epochs):
     pred_flow = flowNet(im1, im2)
     end = time.time()
     print(end-start)
+    start = time.time()
     loss = torch.norm(flow-pred_flow, p=2, dim=1).mean()
-
+    end = time.time()
+    print(end-start)
+    start = time.time()
     loss.backward()
+    end = time.time()
+    print(end-start)
     optim.step()
     running_loss += loss.item()
     if epoch % 500 == 499:

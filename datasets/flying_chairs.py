@@ -3,12 +3,16 @@ from os.path import join
 from torch.utils.data import Dataset
 from image_lib.io import read
 
+def remove_suffix(input_string, suffix):
+    if suffix and input_string.endswith(suffix):
+        return input_string[:-len(suffix)]
+    return input_string
 
 class FlyingChairsDataset(Dataset):
     def __init__(self, img_dir, transform=None):
         self.img_dir = img_dir
         self.transform = transform
-        self.IDs = [file.removesuffix('_flow.flo') for file in os.listdir(self.img_dir) if file.endswith('.flo')]
+        self.IDs = [remove_suffix(file,'_flow.flo') for file in os.listdir(self.img_dir) if file.endswith('.flo')]
 
     def __len__(self):
         return len(self.IDs)
