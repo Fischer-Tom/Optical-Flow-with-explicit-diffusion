@@ -1,19 +1,19 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import time
 
 
 class FlowNetC(nn.Module):
 
-    def __init__(self):
+    def __init__(self, device='cpu'):
         super().__init__()
         self.ExtractorA = FeatureExtractor()
         self.ExtractorB = FeatureExtractor()
         self.conv_redir = SimpleConv(256, 32, 1, 1, 0)
         self.Corr = CorrelationModule()
-        self.Encoder = Encoder()
+        self.Encoder = Encoder(in_ch=473)
         self.Decoder = Decoder()
-
 
     def forward(self, im1, im2):
         x1, corrA = self.ExtractorA(im1)
@@ -42,35 +42,86 @@ class FeatureExtractor(nn.Module):
 
 class CorrelationModule(nn.Module):
 
-    def __init__(self, k=0, d=20, s1=1, s2=2):
+    def __init__(self, k=0, d=20, s1=1, s2=2, device='cpu'):
         super().__init__()
         self.k = k
         self.d = d
         self.s1 = s1
         self.s2 = s2
+        self.device = device
 
     def forward(self, x1, x2):
         pad = self.d // 2
-        padded_x1 = F.pad(x1, (pad, pad, pad, pad))
+        padded_x2 = F.pad(x2, (pad, pad, pad, pad), mode='constant', value=0.0)
 
-        patches = padded_x1.unfold(2, self.d + self.s1, self.s1).unfold(3, self.d + self.s1, self.s1)
+        patches = padded_x2.unfold(2, self.d + self.s1, self.s1).unfold(3, self.d + self.s1, self.s1).detach()
         b, d, w, h = x1.shape
-        out = torch.zeros((b, (self.d + self.s1) ** 2, w, h))
+        out = torch.zeros((b, (self.d + self.s1) ** 2, w, h)).to(self.device)
         for i in range(w):
             for j in range(h):
                 for k in range(b):
                     patch = patches[k, :, i, j]
-                    weight = torch.unsqueeze(torch.unsqueeze(torch.unsqueeze(x2[k, :, i, j], -1), -1), 0)
+                    weight = torch.unsqueeze(torch.unsqueeze(torch.unsqueeze(x1[k, :, i, j], -1), -1), 0)
                     pixel_corr = F.conv2d(patch, weight)
                     out[k, :, i, j] = pixel_corr.flatten()
         return out
 
+
+class CorrFast(nn.Module):
+    def __init__(self, kernel_size=1, d=20, s1=1, s2=2):
+        super().__init__()
+        self.ks = kernel_size
+        self.s1 = s1
+        self.s2 = s2
+        self.d = d
+        self.padlayer = nn.ConstantPad2d(d, 0)
+
+    def forward(self, feat1, feat2):
+        feat2_pad = self.padlayer(feat2)
+        b, _, height, width = feat1.shape
+        offsetx, offsety = torch.meshgrid([torch.arange(0, height),
+                                           torch.arange(0, width)], indexing='ij')
+        output = torch.cat([
+            torch.sum(
+                feat1[:, :, dx:dx+1, dy:dy+1] *
+                feat2_pad[:, :, dx:dx + 2 * self.d + 1:self.s2, dy:dy + 2 * self.d + 1:self.s2], 1,
+                keepdim=True).flatten(start_dim=2)
+            for dx, dy in zip(offsetx.reshape(-1), offsety.reshape(-1))
+        ], 1)
+        out_channels = output.shape[2]
+        return output.reshape((b, out_channels, height, width))
+
+class Correlation(nn.Module):
+    def __init__(self, kernel_size=1, d=20, s1=1, s2=2):
+        super().__init__()
+        self.ks = kernel_size
+        self.s1 = s1
+        self.s2 = s2
+        self.d = d
+        self.padlayer = nn.ConstantPad2d(d, 0)
+
+    def forward(self, feat1, feat2):
+        feat2_pad = self.padlayer(feat2)
+        _, _, height, width = feat1.shape
+        offsetx, offsety = torch.meshgrid([torch.arange(0, 2*self.d + 1, step=self.s2),
+                                           torch.arange(0, 2*self.d + 1, step=self.s2)], indexing='ij')
+
+        output = torch.cat([
+            torch.sum(
+                feat1 *
+                feat2_pad[:, :, dx:dx + height, dy:dy + width], 1,
+                keepdim=True)
+            for dx, dy in zip(offsetx.reshape(-1), offsety.reshape(-1))
+        ], 1)
+        return output
+
+
 class Encoder(nn.Module):
 
-    def __init__(self):
+    def __init__(self, in_ch):
         super().__init__()
         dim = 64
-        self.conv3_1 = SimpleConv(473, dim*4, 3, 1, 1, bias=False)
+        self.conv3_1 = SimpleConv(in_ch, dim * 4, 3, 1, 1, bias=False)
         self.conv4 = SimpleConv(dim * 4, dim * 8, 3, 2, 1, bias=False)
         self.conv4_1 = SimpleConv(dim * 8, dim * 8, 3, 1, 1, bias=False)
         self.conv5 = SimpleConv(dim * 8, dim * 8, 3, 2, 1, bias=False)
@@ -83,6 +134,7 @@ class Encoder(nn.Module):
         x4 = self.conv5_1(self.conv5(x3))
         x5 = self.conv6(x4)
         return [x2, x3, x4, x5]
+
 
 class Decoder(nn.Module):
 

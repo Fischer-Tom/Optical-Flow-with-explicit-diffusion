@@ -18,7 +18,7 @@ b = (0.9, 0.999)
 params = {'batch_size': 2,
           'shuffle': True,
           'num_workers': 4}
-epochs = 2
+epochs = 1
 running_loss = 0.0
 transforms = transforms.Compose([transforms.ToTensor()])
 
@@ -27,7 +27,7 @@ train_set = FlyingChairsDataset('datasets/FlyingChairs_release/data', transforms
 train_loader = torch.utils.data.DataLoader(train_set, **params)
 
 # Model
-flowNet = FlowNetC().to(device)
+flowNet = FlowNetC(device=device).to(device)
 
 # Optimizers
 optim = torch.optim.Adam(flowNet.parameters(), lr=lr, betas=b)
@@ -44,16 +44,10 @@ for epoch in range(epochs):
     optim.zero_grad()
     start = time.time()
     pred_flow = flowNet(im1, im2)
-    end = time.time()
-    print(end-start)
-    start = time.time()
     loss = torch.norm(flow-pred_flow, p=2, dim=1).mean()
-    end = time.time()
-    print(end-start)
-    start = time.time()
     loss.backward()
     end = time.time()
-    print(end-start)
+    print(f"Dein Ansatz: {end - start}")
     optim.step()
     running_loss += loss.item()
     if epoch % 500 == 499:
@@ -63,3 +57,5 @@ for epoch in range(epochs):
 
 display_flow_tensor(flow[0].cpu())
 display_flow_tensor(pred_flow[0].detach().cpu())
+display_flow_tensor(flow[1].cpu())
+display_flow_tensor(pred_flow[1].detach().cpu())
