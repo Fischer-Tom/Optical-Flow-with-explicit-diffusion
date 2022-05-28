@@ -11,7 +11,7 @@ class FlowNetC(nn.Module):
         self.ExtractorA = FeatureExtractor()
         self.ExtractorB = FeatureExtractor()
         self.conv_redir = SimpleConv(256, 32, 1, 1, 0)
-        self.Corr = CorrelationModule()
+        self.Corr = Correlation()
         self.Encoder = Encoder(in_ch=473)
         self.Decoder = Decoder()
 
@@ -30,9 +30,9 @@ class FeatureExtractor(nn.Module):
     def __init__(self):
         super().__init__()
         dim = 64
-        self.conv1 = SimpleConv(3, dim, 7, 2, 3, bias=False)
-        self.conv2 = SimpleConv(dim, dim * 2, 5, 2, 2, bias=False)
-        self.conv3 = SimpleConv(dim * 2, dim * 4, 5, 2, 2, bias=False)
+        self.conv1 = SimpleConv(3, dim, 7, 2, 3, bias=True)
+        self.conv2 = SimpleConv(dim, dim * 2, 5, 2, 2, bias=True)
+        self.conv3 = SimpleConv(dim * 2, dim * 4, 5, 2, 2, bias=True)
 
     def forward(self, x):
         x = self.conv2(self.conv1(x))
@@ -121,12 +121,12 @@ class Encoder(nn.Module):
     def __init__(self, in_ch):
         super().__init__()
         dim = 64
-        self.conv3_1 = SimpleConv(in_ch, dim * 4, 3, 1, 1, bias=False)
-        self.conv4 = SimpleConv(dim * 4, dim * 8, 3, 2, 1, bias=False)
-        self.conv4_1 = SimpleConv(dim * 8, dim * 8, 3, 1, 1, bias=False)
-        self.conv5 = SimpleConv(dim * 8, dim * 8, 3, 2, 1, bias=False)
-        self.conv5_1 = SimpleConv(dim * 8, dim * 8, 3, 1, 1, bias=False)
-        self.conv6 = SimpleConv(dim * 8, dim * 16, 3, 2, 1, bias=False)
+        self.conv3_1 = SimpleConv(in_ch, dim * 4, 3, 1, 1, bias=True)
+        self.conv4 = SimpleConv(dim * 4, dim * 8, 3, 2, 1, bias=True)
+        self.conv4_1 = SimpleConv(dim * 8, dim * 8, 3, 1, 1, bias=True)
+        self.conv5 = SimpleConv(dim * 8, dim * 8, 3, 2, 1, bias=True)
+        self.conv5_1 = SimpleConv(dim * 8, dim * 8, 3, 1, 1, bias=True)
+        self.conv6 = SimpleConv(dim * 8, dim * 16, 3, 2, 1, bias=True)
 
     def forward(self, x):
         x2 = self.conv3_1(x)
@@ -145,10 +145,10 @@ class Decoder(nn.Module):
         self.deconv3 = SimpleUpConv(256 + 512 + 2, 128, 1, 2, 0, 1, False)
         self.deconv2 = SimpleUpConv(128 + 256 + 2, 64, 1, 2, 0, 1, False)
 
-        self.flow5 = nn.Conv2d(in_ch, 2, 5, 1, 2, bias=False)
-        self.flow4 = nn.Conv2d(256 + 512 + 2, 2, 5, 1, 2, bias=False)
-        self.flow3 = nn.Conv2d(128 + 256 + 2, 2, 5, 1, 2, bias=False)
-        self.prediction = nn.Conv2d(64 + 128 + 2, 2, 5, 1, 2, bias=False)
+        self.flow5 = nn.Conv2d(in_ch, 2, 5, 1, 2, bias=True)
+        self.flow4 = nn.Conv2d(256 + 512 + 2, 2, 5, 1, 2, bias=True)
+        self.flow3 = nn.Conv2d(128 + 256 + 2, 2, 5, 1, 2, bias=True)
+        self.prediction = nn.Conv2d(64 + 128 + 2, 2, 5, 1, 2, bias=True)
 
         self.upsample2 = nn.UpsamplingBilinear2d(scale_factor=2)
         self.upsample4 = nn.UpsamplingBilinear2d(scale_factor=4)
