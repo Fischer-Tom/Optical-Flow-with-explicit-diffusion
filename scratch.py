@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import torch
 from datasets.flying_chairs import FlyingChairsDataset
 from torchvision import transforms
@@ -5,34 +6,38 @@ from models.FlowNetC import FlowNetC
 from torch.optim.lr_scheduler import StepLR
 import time
 
+
 use_cuda = torch.cuda.is_available()
-device = torch.device('cuda:0' if use_cuda else 'cpu')
+
+device = torch.device('cuda')
 
 # Hyperparameters
 lr = 1e-6
 b = (0.9, 0.999)
 
 # Parameters for the dataloader
-params = {'batch_size': 8,
+params = {'batch_size': 32,
           'shuffle': True,
           'num_workers': 4}
-epochs = 500000
+epochs = 10000
 running_loss = 0.0
 transforms = transforms.Compose([transforms.ToTensor()])
 
 # Datasets and Loaders
-train_set = FlyingChairsDataset('datasets/FlyingChairs_release/data', transforms)
+train_set = FlyingChairsDataset('/home/s8tmfisc/FlyingChairs_release/data', transforms)
 train_loader = torch.utils.data.DataLoader(train_set, **params)
 
+
 # Model
-flowNet = FlowNetC(device=device).to(device)
+flowNet = FlowNetC(device=device)
+flowNet = torch.nn.DataParallel(flowNet).to(device)
 
 # Optimizers
 optim = torch.optim.Adam(flowNet.parameters(), lr=lr, betas=b)
 lr_helper = 1e1
-scheduler = StepLR(optim, step_size=1000, gamma=lr_helper**(1./5.))
+scheduler = StepLR(optim, step_size=100, gamma=lr_helper**(1./5.))
 
-training_iterations = 1
+training_iterations = 0
 
 for epoch in range(epochs):
 
@@ -40,7 +45,7 @@ for epoch in range(epochs):
         if use_cuda:
             im1 = im1.to(device)
             im2 = im2.to(device)
-            flow = flow.to(device)
+            flow = flow.to(device) 
         optim.zero_grad()
         pred_flow = flowNet(im1, im2)
         loss = torch.norm(flow-pred_flow, p=2, dim=1).mean()
@@ -48,17 +53,17 @@ for epoch in range(epochs):
         optim.step()
         running_loss += loss.item()
         scheduler.step()
-        if training_iterations >= 300000:
-            scheduler.state_dict()["step_size"] = 100000
+        if training_iterations >= 10000:
+            scheduler.state_dict()["step_size"] = 10000
             scheduler.state_dict()["gamma"] = 0.5
 
         training_iterations += 1
 
-    if training_iterations % 10000 == 9999:
-        print(f'[{epoch+1}, {training_iterations+1}]: EPE-loss: {running_loss / 10000:.3f}')
-        running_loss = 0.0
-    if training_iterations > epochs:
-        torch.save(flowNet.state_dict(), 'model.pt')
-        break
+        if training_iterations % 100 == 0:
+            print(f'[{epoch+1}, {training_iterations+1}]: EPE-loss: {running_loss/100 :.3f}')
+            running_loss = 0.0
+        if training_iterations > epochs:
+            torch.save(flowNet.state_dict(), 'model.pt')
+            break
 
 torch.save(flowNet.state_dict(), 'model.pt')
