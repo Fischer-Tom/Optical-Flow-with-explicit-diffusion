@@ -7,7 +7,6 @@ from torch.optim.lr_scheduler import StepLR
 from image_lib.core import display_flow_tensor
 import time
 
-
 use_cuda = torch.cuda.is_available()
 
 device = torch.device('cuda' if use_cuda else 'cpu')
