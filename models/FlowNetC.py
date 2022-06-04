@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from spatial_correlation_sampler import spatial_correlation_sample
 import time
 
 
@@ -11,14 +12,24 @@ class FlowNetC(nn.Module):
         self.ExtractorA = FeatureExtractor()
         self.ExtractorB = FeatureExtractor()
         self.conv_redir = SimpleConv(256, 32, 1, 1, 0)
-        self.Corr = Correlation()
+        #self.Corr = Correlation()
         self.Encoder = Encoder(in_ch=473)
         self.Decoder = Decoder()
 
     def forward(self, im1, im2):
         x1, corrA = self.ExtractorA(im1)
         _, corrB = self.ExtractorB(im2)
-        corr = self.Corr(corrA, corrB)
+        #corr = self.Corr(corrA, corrB)
+
+        corr = spatial_correlation_sample(corrA,
+                                          corrB,
+                                          kernel_size=1,
+                                          patch_size=21,
+                                          stride=1,
+                                          padding=0,
+                                          dilation=1,
+                                          dilation_patch=2).reshape(8,441,48,64)
+
         conv_redir = self.conv_redir(corrA)
         x2, x3, x4, x5 = self.Encoder(torch.cat((corr, conv_redir), dim=1))
         pred = self.Decoder([x1, x2, x3, x4, x5])
