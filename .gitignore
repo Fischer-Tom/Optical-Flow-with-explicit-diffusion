@@ -1,0 +1,4 @@
+datasets/FlyingChairs_release
+model.pt
+*/__pycache__
+.idea

@@ -118,11 +118,13 @@ class Correlation(nn.Module):
                                            torch.arange(0, 2*self.d + 1, step=self.s2)], indexing='ij')
 
         output = torch.cat([
+
             torch.sum(
                 feat1 *
                 feat2_pad[:, :, dx:dx + height, dy:dy + width], 1,
                 keepdim=True)
             for dx, dy in zip(offsetx.reshape(-1), offsety.reshape(-1))
+
         ], 1)
         return output
 

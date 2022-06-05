@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 
 
+
 class FlowNetS(nn.Module):
 
     def __init__(self):
@@ -9,11 +10,12 @@ class FlowNetS(nn.Module):
         self.encoder = Encoder()
         self.decoder = Decoder()
 
+
     def forward(self, im1, im2):
         stacked_images = torch.cat((im1, im2), 1)
         encoder_out = self.encoder(stacked_images)
-        features = self.decoder(encoder_out)
-        return features
+        out = self.decoder(encoder_out)
+        return out
 
 
 class Encoder(nn.Module):
@@ -57,6 +59,7 @@ class Decoder(nn.Module):
 
         self.upsample2 = nn.UpsamplingBilinear2d(scale_factor=2)
         self.upsample4 = nn.UpsamplingBilinear2d(scale_factor=4)
+        self.sig = nn.Sigmoid()
 
     def forward(self, x):
         [x1, x2, x3, x4, x] = x
@@ -97,3 +100,36 @@ class SimpleUpConv(nn.Module):
         x = self.conv(x)
         x = self.act(x)
         return x
+
+class InpaintingBlock(nn.Module):
+
+    def __init__(self):
+        super(InpaintingBlock, self).__init__()
+        self.conv = nn.Conv2d(in_channels=2, out_channels=2, kernel_size=3, stride=1, padding=1, dilation=1, groups=2,
+                              bias=False, padding_mode='reflect')
+        self.conv.requires_grad = False
+        self.init_weights()
+
+    def forward(self, x, time_steps=20):
+        masked_x = x
+        mask = x == 0
+        for _ in range(time_steps):
+            diff_x = self.conv(x)
+            x = masked_x + diff_x*mask
+        return x
+
+    def init_weights(self, tau=0.25, h1=1, h2=1):
+        hx = tau / (h1 * h1)
+        hy = tau / (h2 * h2)
+        weight = torch.zeros_like(self.conv.weight)
+        weight[0][0][1][0] = hx
+        weight[0][0][1][2] = hx
+        weight[0][0][0][1] = hy
+        weight[0][0][2][1] = hy
+        weight[0][0][1][1] = (1 - 2 * hx - 2 * hy)
+        weight[1][0][1][0] = hx
+        weight[1][0][1][2] = hx
+        weight[1][0][0][1] = hy
+        weight[1][0][2][1] = hy
+        weight[1][0][1][1] = (1 - 2 * hx - 2 * hy)
+        self.conv.weight = nn.Parameter(weight)
