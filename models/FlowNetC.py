@@ -9,27 +9,25 @@ class FlowNetC(nn.Module):
 
     def __init__(self, device='cpu'):
         super().__init__()
-        self.ExtractorA = FeatureExtractor()
-        self.ExtractorB = FeatureExtractor()
+        self.Extractor = FeatureExtractor()
         self.conv_redir = SimpleConv(256, 32, 1, 1, 0)
-        #self.Corr = Correlation()
+        self.Corr = Correlation()
         self.Encoder = Encoder(in_ch=473)
         self.Decoder = Decoder()
 
     def forward(self, im1, im2):
-        x1, corrA = self.ExtractorA(im1)
-        _, corrB = self.ExtractorB(im2)
-        #corr = self.Corr(corrA, corrB)
+        x1, corrA = self.Extractor(im1)
+        _, corrB = self.Extractor(im2)
+        corr = self.Corr(corrA, corrB)
 
-        corr = spatial_correlation_sample(corrA,
-                                          corrB,
-                                          kernel_size=1,
-                                          patch_size=21,
-                                          stride=1,
-                                          padding=0,
-                                          dilation=1,
-                                          dilation_patch=2).reshape(8,441,48,64)
-
+        # corr2 = spatial_correlation_sample(corrA,
+        #                                  corrB,
+        #                                  kernel_size=1,
+        #                                  patch_size=21,
+        #                                  stride=1,
+        #                                  padding=0,
+        #                              dilation=1,
+        #                                  dilation_patch=2).reshape(2,441,48,64)
         conv_redir = self.conv_redir(corrA)
         x2, x3, x4, x5 = self.Encoder(torch.cat((corr, conv_redir), dim=1))
         pred = self.Decoder([x1, x2, x3, x4, x5])
@@ -94,13 +92,14 @@ class CorrFast(nn.Module):
                                            torch.arange(0, width)], indexing='ij')
         output = torch.cat([
             torch.sum(
-                feat1[:, :, dx:dx+1, dy:dy+1] *
+                feat1[:, :, dx:dx + 1, dy:dy + 1] *
                 feat2_pad[:, :, dx:dx + 2 * self.d + 1:self.s2, dy:dy + 2 * self.d + 1:self.s2], 1,
                 keepdim=True).flatten(start_dim=2)
             for dx, dy in zip(offsetx.reshape(-1), offsety.reshape(-1))
         ], 1)
         out_channels = output.shape[2]
         return output.reshape((b, out_channels, height, width))
+
 
 class Correlation(nn.Module):
     def __init__(self, kernel_size=1, d=20, s1=1, s2=2):
@@ -113,20 +112,22 @@ class Correlation(nn.Module):
 
     def forward(self, feat1, feat2):
         feat2_pad = self.padlayer(feat2)
-        _, _, height, width = feat1.shape
-        offsetx, offsety = torch.meshgrid([torch.arange(0, 2*self.d + 1, step=self.s2),
-                                           torch.arange(0, 2*self.d + 1, step=self.s2)], indexing='ij')
-
-        output = torch.cat([
-
-            torch.sum(
-                feat1 *
-                feat2_pad[:, :, dx:dx + height, dy:dy + width], 1,
-                keepdim=True)
-            for dx, dy in zip(offsetx.reshape(-1), offsety.reshape(-1))
-
-        ], 1)
+        output = connect(feat1, feat2_pad, self.d, self.s2)
         return output
+
+
+@torch.jit.script
+def connect(feat1, feat2_pad, d: int, s2: int):
+    _, _, height, width = feat1.shape
+    offsetx, offsety = torch.meshgrid([torch.arange(0, 2 * d + 1, step=s2),
+                                       torch.arange(0, 2 * d + 1, step=s2)], indexing='ij')
+
+    output = torch.cat([
+        torch.sum(feat1*feat2_pad[:, :, dx:dx + height, dy:dy + width], 1, keepdim=True)
+        for dx, dy in zip(offsetx.reshape(-1), offsety.reshape(-1))
+    ], 1)
+
+    return output
 
 
 class Encoder(nn.Module):

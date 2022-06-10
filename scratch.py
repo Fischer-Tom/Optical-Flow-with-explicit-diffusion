@@ -16,7 +16,7 @@ lr = 1e-4
 b = (0.9, 0.999)
 
 # Parameters for the dataloader
-params = {'batch_size': 8,
+params = {'batch_size': 2,
           'shuffle': True,
           'num_workers': 4}
 epochs = 600000
@@ -50,7 +50,8 @@ while True:
             im1 = im1.to(device)
             im2 = im2.to(device)
             flow = flow.to(device)
-        optim.zero_grad()
+        optim.zero_grad(set_to_none=True)
+        start = time.time()
         pred_flow = flowNet(im1, im2)
         loss = torch.norm(flow - pred_flow, p=2, dim=1).mean()
         loss.backward()
@@ -61,7 +62,9 @@ while True:
             optim.state_dict()["lr"] *= 0.5
 
         training_iterations += 1
-
+        end = time.time()
+        print(end-start)
+        #exit()
         if training_iterations % update == 0:
             print(f'[{training_iterations + 1}]: EPE-loss: {running_loss / update :.3f}')
             running_loss = 0.0
