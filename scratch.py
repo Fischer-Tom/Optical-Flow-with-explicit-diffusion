@@ -41,7 +41,7 @@ optim = torch.optim.Adam(flowNet.parameters(), lr=lr, betas=b, weight_decay=4e-4
 scheduler = LinearLR(optim, start_factor=0.01, total_iters=10000)
 
 training_iterations = 0
-update = 200
+update = 1000
 stop = False
 
 while True:
@@ -50,6 +50,9 @@ while True:
             im1 = im1.to(device)
             im2 = im2.to(device)
             flow = flow.to(device)
+        start = torch.cuda.Event(enable_timing=True)
+        end = torch.cuda.Event(enable_timing=True)
+        start.record()
         optim.zero_grad()
         pred_flow = flowNet(im1, im2)
         loss = torch.norm(flow - pred_flow, p=2, dim=1).mean()
@@ -57,19 +60,21 @@ while True:
         optim.step()
         running_loss += loss.item()
         scheduler.step()
+        end.record()
+
+        torch.cuda.synchronize()
         if training_iterations >= 300000 and training_iterations % 100000 == 0:
             optim.state_dict()["lr"] *= 0.5
 
-        training_iterations += 1
-
-        if training_iterations % update == 0:
-            print(f'[{training_iterations + 1}]: EPE-loss: {running_loss / update :.3f}')
+        if training_iterations % update == 0 or True:
+            print(f'[Iterations|EPE-loss|Runtime]: {training_iterations + 1} | {running_loss / update :.3f} | {start.elapsed_time(end) : .1f}')
             running_loss = 0.0
+        training_iterations += 1
         if training_iterations % 100000:
             torch.save(flowNet.state_dict(), 'model.pt')
-            break
         if training_iterations >= epochs:
             stop = True
+            break
     if stop:
         break
 

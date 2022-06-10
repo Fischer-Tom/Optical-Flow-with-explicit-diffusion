@@ -9,16 +9,15 @@ class FlowNetC(nn.Module):
 
     def __init__(self, device='cpu'):
         super().__init__()
-        self.ExtractorA = FeatureExtractor()
-        self.ExtractorB = FeatureExtractor()
+        self.Extractor = FeatureExtractor()
         self.conv_redir = SimpleConv(256, 32, 1, 1, 0)
         #self.Corr = Correlation()
         self.Encoder = Encoder(in_ch=473)
         self.Decoder = Decoder()
 
     def forward(self, im1, im2):
-        x1, corrA = self.ExtractorA(im1)
-        _, corrB = self.ExtractorB(im2)
+        x1, corrA = self.Extractor(im1)
+        _, corrB = self.Extractor(im2)
         #corr = self.Corr(corrA, corrB)
 
         corr = spatial_correlation_sample(corrA,
