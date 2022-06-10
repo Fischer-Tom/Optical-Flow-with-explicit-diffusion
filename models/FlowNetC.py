@@ -11,14 +11,12 @@ class FlowNetC(nn.Module):
         super().__init__()
         self.Extractor = FeatureExtractor()
         self.conv_redir = SimpleConv(256, 32, 1, 1, 0)
-        #self.Corr = Correlation()
         self.Encoder = Encoder(in_ch=473)
         self.Decoder = Decoder()
 
     def forward(self, im1, im2):
         x1, corrA = self.Extractor(im1)
         _, corrB = self.Extractor(im2)
-        #corr = self.Corr(corrA, corrB)
 
         corr = spatial_correlation_sample(corrA,
                                           corrB,
@@ -27,8 +25,10 @@ class FlowNetC(nn.Module):
                                           stride=1,
                                           padding=0,
                                           dilation=1,
-                                          dilation_patch=2).reshape(8,441,48,64)
-
+                                          dilation_patch=2)
+        b, ph, pw, h, w = corr.size()
+        corr = corr.view(b, ph*pw, h, w)/im1.size(1)
+        corr = F.leaky_relu(corr, 0.1)
         conv_redir = self.conv_redir(corrA)
         x2, x3, x4, x5 = self.Encoder(torch.cat((corr, conv_redir), dim=1))
         pred = self.Decoder([x1, x2, x3, x4, x5])
@@ -39,10 +39,10 @@ class FeatureExtractor(nn.Module):
 
     def __init__(self):
         super().__init__()
-        dim = 64
-        self.conv1 = SimpleConv(3, dim, 7, 2, 3, bias=True)
-        self.conv2 = SimpleConv(dim, dim * 2, 5, 2, 2, bias=True)
-        self.conv3 = SimpleConv(dim * 2, dim * 4, 5, 2, 2, bias=True)
+
+        self.conv1 = SimpleConv(3, 64, 7, 2, 3, bias=True)
+        self.conv2 = SimpleConv(64, 128, 5, 2, 2, bias=True)
+        self.conv3 = SimpleConv(128, 256, 5, 2, 2, bias=True)
 
     def forward(self, x):
         x = self.conv2(self.conv1(x))
@@ -132,13 +132,13 @@ class Encoder(nn.Module):
 
     def __init__(self, in_ch):
         super().__init__()
-        dim = 64
-        self.conv3_1 = SimpleConv(in_ch, dim * 4, 3, 1, 1, bias=True)
-        self.conv4 = SimpleConv(dim * 4, dim * 8, 3, 2, 1, bias=True)
-        self.conv4_1 = SimpleConv(dim * 8, dim * 8, 3, 1, 1, bias=True)
-        self.conv5 = SimpleConv(dim * 8, dim * 8, 3, 2, 1, bias=True)
-        self.conv5_1 = SimpleConv(dim * 8, dim * 8, 3, 1, 1, bias=True)
-        self.conv6 = SimpleConv(dim * 8, dim * 16, 3, 2, 1, bias=True)
+        self.conv3_1 = SimpleConv(in_ch, 256, 3, 1, 1, bias=True)
+        self.conv4 = SimpleConv(256, 512, 3, 2, 1, bias=True)
+        self.conv4_1 = SimpleConv(512, 512, 3, 1, 1, bias=True)
+        self.conv5 = SimpleConv(512, 512, 3, 2, 1, bias=True)
+        self.conv5_1 = SimpleConv(512, 512, 3, 1, 1, bias=True)
+        self.conv6 = SimpleConv(512, 1024, 3, 2, 1, bias=True)
+        self.conv6_1 = SimpleConv(1024, 1024, 3, 2, 1, bias=True)
 
     def forward(self, x):
         x2 = self.conv3_1(x)
@@ -153,14 +153,20 @@ class Decoder(nn.Module):
     def __init__(self, in_ch=1024):
         super().__init__()
         self.deconv5 = SimpleUpConv(in_ch, 512, 1, 2, 0, 1, False)
-        self.deconv4 = SimpleUpConv(in_ch, 256, 1, 2, 0, 1, False)
+        self.deconv4 = SimpleUpConv(in_ch+2, 256, 1, 2, 0, 1, False)
         self.deconv3 = SimpleUpConv(256 + 512 + 2, 128, 1, 2, 0, 1, False)
         self.deconv2 = SimpleUpConv(128 + 256 + 2, 64, 1, 2, 0, 1, False)
 
-        self.flow5 = nn.Conv2d(in_ch, 2, 5, 1, 2, bias=True)
-        self.flow4 = nn.Conv2d(256 + 512 + 2, 2, 5, 1, 2, bias=True)
-        self.flow3 = nn.Conv2d(128 + 256 + 2, 2, 5, 1, 2, bias=True)
-        self.prediction = nn.Conv2d(64 + 128 + 2, 2, 5, 1, 2, bias=True)
+        self.flow6 = nn.Conv2d(in_ch, 2, 3, 1, 1, bias=False)
+        self.flow5 = nn.Conv2d(in_ch+2, 2, 3, 1, 1, bias=False)
+        self.flow4 = nn.Conv2d(256 + 512 + 2, 2, 3, 1, 1, bias=False)
+        self.flow3 = nn.Conv2d(128 + 256 + 2, 2, 3, 1, 1, bias=False)
+        self.prediction = nn.Conv2d(64 + 128 + 2, 2, 3, 1, 1, bias=False)
+
+        self.upsampled_flow6_to_5 = nn.ConvTranspose2d(2, 2, 4, 2, 1, bias=False)
+        self.upsampled_flow5_to_4 = nn.ConvTranspose2d(2, 2, 4, 2, 1, bias=False)
+        self.upsampled_flow4_to_3 = nn.ConvTranspose2d(2, 2, 4, 2, 1, bias=False)
+        self.upsampled_flow3_to_2 = nn.ConvTranspose2d(2, 2, 4, 2, 1, bias=False)
 
         self.upsample2 = nn.UpsamplingBilinear2d(scale_factor=2)
         self.upsample4 = nn.UpsamplingBilinear2d(scale_factor=4)
@@ -168,40 +174,38 @@ class Decoder(nn.Module):
     def forward(self, x):
         [x1, x2, x3, x4, x] = x
 
-        x = torch.cat((self.deconv5(x), x4), dim=1)
+        flow6 = self.flow6(x)
+        x = torch.cat((self.deconv5(x), x4, self.upsampled_flow6_to_5(flow6)), dim=1)
         flow5 = self.flow5(x)
-        x = torch.cat((self.deconv4(x), x3, self.upsample2(flow5)), dim=1)
+        x = torch.cat((self.deconv4(x), x3, self.upsampled_flow5_to_4(flow5)), dim=1)
         flow4 = self.flow4(x)
-        x = torch.cat((self.deconv3(x), x2, self.upsample2(flow4)), dim=1)
+        x = torch.cat((self.deconv3(x), x2, self.upsampled_flow4_to_3(flow4)), dim=1)
         flow3 = self.flow3(x)
-        x = torch.cat((self.deconv2(x), x1, self.upsample2(flow3)), dim=1)
+        x = torch.cat((self.deconv2(x), x1, self.upsampled_flow3_to_2(flow3)), dim=1)
         x = self.prediction(x)
         return self.upsample4(x)
 
 
 class SimpleConv(nn.Module):
 
-    def __init__(self, in_ch, out_ch, ks, stride=1, pad=1, pad_mode='reflect', bias=True, act=nn.ReLU()):
+    def __init__(self, in_ch, out_ch, ks, stride=1, pad=1, pad_mode='zeros', bias=True, act=nn.LeakyReLU(0.1, inplace=True)):
         super().__init__()
         self.conv = nn.Conv2d(in_channels=in_ch, out_channels=out_ch, kernel_size=ks,
                               stride=stride, padding=pad, padding_mode=pad_mode, bias=bias)
         self.act = act
 
     def forward(self, x):
-        x = self.conv(x)
-        x = self.act(x)
-        return x
+        return self.act(self.conv(x))
 
 
 class SimpleUpConv(nn.Module):
 
-    def __init__(self, in_ch, out_ch, ks, stride=1, pad=1, output_padding=1, bias=True, act=nn.ReLU()):
+    def __init__(self, in_ch, out_ch, ks, stride=1, pad=1, output_padding=1,
+                 bias=True, act=nn.LeakyReLU(0.1, inplace=True)):
         super().__init__()
         self.conv = nn.ConvTranspose2d(in_channels=in_ch, out_channels=out_ch, kernel_size=ks,
                                        stride=stride, padding=pad, output_padding=output_padding, bias=bias)
         self.act = act
 
     def forward(self, x):
-        x = self.conv(x)
-        x = self.act(x)
-        return x
+        return self.act(self.conv(x))
