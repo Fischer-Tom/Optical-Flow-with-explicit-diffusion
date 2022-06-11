@@ -5,6 +5,7 @@ from torchvision import transforms
 from models.FlowNetC import FlowNetC
 from torch.optim.lr_scheduler import LinearLR
 #from image_lib.core import display_flow_tensor
+from models.util import MultiScale_EPE_Loss, EPE_Loss
 import time
 
 use_cuda = torch.cuda.is_available()
@@ -16,17 +17,18 @@ lr = 1e-4
 b = (0.9, 0.999)
 
 # Parameters for the dataloader
-params = {'batch_size': 8,
+params = {'batch_size': 16,
           'shuffle': True,
           'num_workers': 4}
-epochs = 600000
-running_loss = 0.0
+epochs = 150000
+running_multi_loss = 0.0
+running_final_loss = 0.0
 transforms = transforms.Compose([transforms.ToTensor()])
 
 # Datasets and Loaders
 dataset = FlyingChairsDataset('datasets/FlyingChairs_release/data', transforms)
 set_size = dataset.__len__()
-train_size = int(0.8 * set_size)
+train_size = int(0.9 * set_size)
 test_size = set_size - train_size
 train_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_size, test_size],
                                                             generator=torch.Generator().manual_seed(42))
@@ -38,7 +40,7 @@ flowNet = FlowNetC(device=device).to(device)
 
 # Optimizers
 optim = torch.optim.Adam(flowNet.parameters(), lr=lr, betas=b, weight_decay=4e-4)
-scheduler = LinearLR(optim, start_factor=0.01, total_iters=10000)
+#scheduler = LinearLR(optim, start_factor=0.01, total_iters=10000)
 
 training_iterations = 0
 update = 1000
@@ -53,24 +55,31 @@ while True:
         start = torch.cuda.Event(enable_timing=True)
         end = torch.cuda.Event(enable_timing=True)
         start.record()
-        optim.zero_grad()
         pred_flow = flowNet(im1, im2)
-        loss = torch.norm(flow - pred_flow, p=2, dim=1).mean()
+        loss = MultiScale_EPE_Loss(pred_flow, flow)
+        final_loss = EPE_Loss(pred_flow[0], flow)
+
+        #update weights
+        optim.zero_grad()
         loss.backward()
         optim.step()
-        running_loss += loss.item()
-        scheduler.step()
+
+        #update running loss
+        running_multi_loss += loss.item()
+        running_final_loss += final_loss.item()
+        #scheduler.step()
         end.record()
 
         torch.cuda.synchronize()
-        if training_iterations >= 300000 and training_iterations % 100000 == 0:
+        if training_iterations >= 100000 and training_iterations % 25000 == 0:
             optim.state_dict()["lr"] *= 0.5
 
-        if training_iterations % update == 0 or True:
-            print(f'[Iterations|EPE-loss|Runtime]: {training_iterations + 1} | {running_loss / update :.3f} | {start.elapsed_time(end) : .1f}')
-            running_loss = 0.0
+        if training_iterations % update == 0:
+            print(f'[Iterations|Multi-EPE-loss|Final-EPE-loss|Runtime]: {training_iterations + 1} | {running_multi_loss / update :.3f} | {running_final_loss / update :.3f} | {start.elapsed_time(end) : .1f}')
+            running_multi_loss = 0.0
+            running_final_loss = 0.0
         training_iterations += 1
-        if training_iterations % 100000:
+        if training_iterations % 50000:
             torch.save(flowNet.state_dict(), 'model.pt')
         if training_iterations >= epochs:
             stop = True

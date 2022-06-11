@@ -32,9 +32,15 @@ def tensor_to_image(tensor):
     pass
 
 
-def display_image(path):
-    pass
-
+def display_numpy_image(array):
+    if len(array.shape) == 2:
+        plt.imshow(array, cmap='gray')
+        plt.axis('off')
+        plt.show()
+        return
+    plt.imshow(array)
+    plt.axis('off')
+    plt.show()
 
 def display_flow_tensor(tensor):
     if len(tensor.shape) == 4:

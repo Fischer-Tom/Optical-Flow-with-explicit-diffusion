@@ -183,7 +183,10 @@ class Decoder(nn.Module):
         flow3 = self.flow3(x)
         x = torch.cat((self.deconv2(x), x1, self.upsampled_flow3_to_2(flow3)), dim=1)
         x = self.prediction(x)
-        return self.upsample4(x)
+
+        if self.training:
+            return [x, flow3, flow4, flow5, flow6]
+        return x
 
 
 class SimpleConv(nn.Module):
